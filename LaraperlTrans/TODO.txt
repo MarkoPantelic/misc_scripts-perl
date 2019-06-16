@@ -1,0 +1,2 @@
+* Make build.pl build into dist/ directory
+* Make option to generate lang.json file with pairs like { "This is orginal in english: "", ...}

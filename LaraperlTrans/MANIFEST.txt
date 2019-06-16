@@ -1,0 +1,2 @@
+No CPAN, only vanilla Perl;
+Final dist result should be just one script file.
