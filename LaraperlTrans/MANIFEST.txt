@@ -1,8 +1,8 @@
 No CPAN, only vanilla Perl;
 Final dist result should be just one script file.
 
-EXAMPLES OF CONVERSION DEMANDS:
-------------------------------
+EXAMPLES OF CONVERSION DEMANDS:                               IMPLEMENTED:
+-------------------------------                               -----------
 //bla.php
 return [
    'bla' => 'BLA'
@@ -11,7 +11,7 @@ return [
 @lang('bla.bla') => @lang('BLA')
 {{ trans('bla.bla') }} => @lang('BLA')
 {{ __('bla.bla') }} => @lang('BLA')
-trans('bla.bla') => __('BLA')
+trans('bla.bla') => __('BLA')                                  * DONE *
 __('bla.bla') => __('BLA')
 
 // foo.php

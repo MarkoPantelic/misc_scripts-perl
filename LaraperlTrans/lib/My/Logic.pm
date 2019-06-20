@@ -6,74 +6,18 @@ use Data::Dumper qw(Dumper);
 use File::Basename;
 use File::Copy "mv";
 
+use My::Helpers qw(trim file_contents_slurp autovivication_insert);
+
 use Exporter qw(import); 
-our @EXPORT_OK = qw(lang_file_to_hash make_translation get_key_from_filepath);
-
-
-sub  trim { 
-	#php like trim
-	
-	my $s = shift; 
-	$s =~ s/^\s+|\s+$//g; 
-	return $s; 
-};
-
-
-sub file_contents_slurp {
-	# slurp file contents into single variable
-	
-	scalar(@_ == 1) || die "Invalid number of arguments received in file_contents_slurp()";
-
-	my $filepath = shift;
-
-	my $content;
-	open(my $fh, '<', $filepath) or die "cannot open $filepath";
-	{
-		local $/;
-		$content = <$fh>;
-	}
-	close($fh);	
-
-	return $content;
-}
-
-
-sub get_key_from_filepath {
-	# NOT USED NOW !@@@@@!!!
-	# return possibly complex key from filepath 
-	# e.g. if filepath 'application/resources/lang/en/admin/auth.php' return 'auth'
-	
-	scalar(@_ == 1) || die "Invalid number of arguments received in get_key_from_filepath()";
-	my $filepath = shift;
-	my @suffixlist = ('.php');
-
-	my ($name, $path, $suffix) = fileparse($filepath, @suffixlist);
-	return $name;
-}
-
-
-sub autovivication_insert {
-	# recursive function to dynamicaly populate a hash with nested value
-	# using autovivication 
-	
-	my ($val, $final_key, $ref, $head, @tail) = @_;
-
-	if (@tail) { 
-		autovivication_insert($val, $final_key, \%{$ref->{$head}}, @tail) 
-	}
-	else {            
-		$ref->{$head}{$final_key} = $val;      
-	}
-}
+our @EXPORT_OK = qw(lang_file_to_hash make_translation get_key_from_filepath make_parent_trans_key);
 
 
 sub lang_file_to_hash {
 	# parse lang file from $filepath and put values into
 	# $dictionary where key is complex and extracted from $filepath 
 	
-	scalar(@_ < 3) && die "Invalid number of arguments received in lang_file_to_hash()";
-	#my ($filepath, $dictionary, @parent_key_parts) = @_; # FOR TRANS KEY AS ARRAY
-	my ($filepath, $dictionary, $parent_key_part) = @_;
+	(@_ < 3) && die "Invalid number of arguments received in lang_file_to_hash()";
+	my ($filepath, $dictionary, $parent_key_part) = @_; # @parent_key_parts FROM TRANS KEY AS ARRAY
 
 	#my $filekey = get_key_from_filepath($filepath); # NOT USED NOW
 
@@ -103,25 +47,86 @@ sub lang_file_to_hash {
 sub fsub {	
 	# substitute inside regex substitution
 	
-	my $f1 = shift;
-	my $s3 = shift;
-	my $dictionary = shift;
+	my ($f1, $s3, $dictionary, $overwrite, $err_report) = @_;
 
 	if(defined $dictionary->{$s3}) {
 		return "__('" . $dictionary->{$s3} . "')";
 	}
-	say "$0 - Log->Error: Key '$s3' not found.";
+	if($overwrite == 0 || ($err_report && $err_report < 2) ) {
+		say "Error!!!:         Key '$s3' not found.";
+	}
+	if($err_report && $err_report > 2) {
+		#TODO: save error report to array and display it at the end of processing
+	}
+
 	return $f1;
+}
+
+
+sub make_lang_subparts_arr
+{
+	# create array subparts from lang file path
+	my $lang = shift;	
+	my $filepath = shift;
+
+	say "lang -> $lang";
+	say "filepath -> $filepath";
+
+	my @parts = split("/lang/$lang/", $filepath);
+	scalar(@parts) >= 2 || die "Error! Laravel 'lang' folder path is unexpected!";
+
+	my $lang_branch = $parts[-1];
+	my @subparts = split("/", $lang_branch);
+
+	return @subparts;
+}
+
+
+sub ptk_from_array
+{
+        # create translation parent key string in string form
+        # 'parent_folder/filename' from supplied array parts
+
+        my @subparts = @_;
+
+        my $has_dir = 0;
+        my $trans_key = '';
+
+        $has_dir = 1 if scalar(@subparts) > 1;
+        if($has_dir) {
+                $trans_key .= $subparts[0] . '/';
+        }
+
+        for (my $i=0; $i<scalar(@subparts); $i++) {
+                next if $i==0 && $has_dir;
+                my $key_last = $subparts[$i];
+                $key_last =~ s/\.php//;
+                $trans_key .= $key_last;
+        }
+
+        return $trans_key;
+}
+
+
+sub make_parent_trans_key {
+        # create translation parent key string in string form
+        # 'parent_folder/filename' from supplied filepath
+
+	my $lang = shift;	
+	my $filepath = shift;
+
+	my @subparts = make_lang_subparts_arr($lang, $filepath);
+
+	return ptk_from_array(@subparts);
+
 }
 
 
 sub make_translation {
 	# perform translation form Laravel's trans() func to __() func
 	
-	scalar(@_ == 3) || die "Invalid number of arguments received in lang_file_to_hash";
-	my $filepath = shift;
-	my $dictionary = shift;
-	my $overwrite = shift;
+	(@_ == 3) || die "Invalid number of arguments received in lang_file_to_hash";
+	my ($filepath, $dictionary, $overwrite) = @_;
 
 	open(FILE, $filepath) || die "Couldn't open the file '$filepath'\n"; my ($fname, $fpath_dir) = fileparse($filepath);
 
@@ -143,7 +148,7 @@ sub make_translation {
 		#	     \))/xg) {
 
 		my $untainted_line = $_;
-		my $match = $_ =~ s/$find_trans_re/fsub($1, $3, $dictionary)/xeg; 
+		my $match = $_ =~ s/$find_trans_re/fsub($1, $3, $dictionary, $overwrite)/xeg; 
 
 		if($overwrite == 0 && $match) {
 			print "Would substitute: ";
