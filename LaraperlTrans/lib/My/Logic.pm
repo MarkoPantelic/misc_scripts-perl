@@ -4,6 +4,7 @@ use warnings;
 use v5.10;
 use Data::Dumper qw(Dumper);
 use File::Basename;
+use File::Copy "mv";
 
 use Exporter qw(import); 
 our @EXPORT_OK = qw(lang_file_to_hash make_translation get_key_from_filepath);
@@ -110,7 +111,7 @@ sub fsub {
 		return "__('" . $dictionary->{$s3} . "')";
 	}
 	say "$0 - Log->Error: Key '$s3' not found.";
-	return $s3;
+	return $f1;
 }
 
 
@@ -122,12 +123,10 @@ sub make_translation {
 	my $dictionary = shift;
 	my $overwrite = shift;
 
-	print "filepath of file to convert = $filepath\n";
+	open(FILE, $filepath) || die "Couldn't open the file '$filepath'\n"; my ($fname, $fpath_dir) = fileparse($filepath);
 
-	open(FILE, $filepath) || die "Couldn't open the file '$filepath'\n";
-	my ($fname, $fpath_dir) = fileparse($filepath);
-	say "fname = $fname, fpath_dir = $fpath_dir";
-	open(FILE_OUT,'>', "${fpath_dir}_temp_$fname") || die "Couldn't create the file '~/custom_file'. err -> $! \n";
+	my $temp_filepath = "/tmp/.__temp_$fname"; #"${fpath_dir}.__temp_$fname";
+	open(FILE_OUT,'>', $temp_filepath) || die "Couldn't create the file '~/custom_file'. err -> $! \n";
 
 	my $find_trans_re = qr/(
 				  trans\(
@@ -143,13 +142,33 @@ sub make_translation {
 		#	     (\w+?|\[.*?\])?
 		#	     \))/xg) {
 
-		$_ =~ s/$find_trans_re/fsub($1, $3, $dictionary)/xeg; 
+		my $untainted_line = $_;
+		my $match = $_ =~ s/$find_trans_re/fsub($1, $3, $dictionary)/xeg; 
+
+		if($overwrite == 0 && $match) {
+			print "Would substitute: ";
+			say trim($untainted_line);
+			print "With:             ";
+			say trim($_);
+		}
 
 		print FILE_OUT $_;
 	}
 
 	close(FILE);	
 	close(FILE_OUT);
+
+	# TODO: here rewind FILE and do a manual copy/overwrite
+	if($overwrite == 1) {
+		say "Overwriting file $filepath";
+		my $err_msg = "Couldn't perform regex substitution on the file $filepath. ";
+
+		unlink($filepath) || die $err_msg . $!;
+
+		# TODO: keep permissions of original $filepath file 
+		mv($temp_filepath, $filepath) || die $err_msg . $!;	
+		say "File overwritten successfully";
+	}
 }
 
 1; # module truthness
