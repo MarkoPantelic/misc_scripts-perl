@@ -21,10 +21,10 @@ no warnings 'experimental'; # for given/when
 # dependencies for importing modules
 use File::Basename qw(dirname basename);
 use Cwd  qw(abs_path);
-use lib dirname(dirname abs_path $0) . '/lib';
+use lib dirname(dirname abs_path $0) . '/LaraperlTrans/lib';
 
 # module which implements main logic
-use My::Logic qw(lang_file_to_hash make_translation make_parent_trans_key); 
+use My::Logic qw(lang_file_to_hash make_translation make_parent_trans_key put_trans_strings_into_buffer); 
 
 # global dictionary for all translation key -> value pairs, global overwrite value
 my (%dictionary, $overwrite);
@@ -35,10 +35,10 @@ sub lang_trans_wanted {
 	# Traverse 'lang/$lang/' directory and store array data from .php files 
 	# (lang files) into %dictionary.
 	
-        my $lang = "en";
+	my $lang = "en";
 
-        if(-f && $_ =~ /^.+\.php$/ ) {
-                my $filepath = $_; # option 'no_chdir' in find() must be set for this assignment;
+	if(-f && $_ =~ /^.+\.php$/ ) {
+		my $filepath = $_; # option 'no_chdir' in find() must be set for this assignment;
 
 		# DEBUG
 		#say "dirname " . $File::Find::dir . ", abs path $filepath";
@@ -47,7 +47,7 @@ sub lang_trans_wanted {
 		my $pp_trans_key = make_parent_trans_key($lang, $filepath);
 
 		lang_file_to_hash($filepath, \%dictionary, $pp_trans_key); 
-        }
+	}
 
 }
 
@@ -56,17 +56,58 @@ sub conv_files_wanted {
 	# Callback function for File::Find
 	# Traverse specified directories and perform conversions on php files
 
-        if(-f && $_ =~ /^.+\.php$/ ) {
-                my $filepath = $_; # option 'no_chdir' in find() must be set for this assignment;
-		
+	if(-f && $_ =~ /^.+\.php$/ ) {
+			my $filepath = $_; # option 'no_chdir' in find() must be set for this assignment;
+	
 		if(not $overwrite) {
 			my $file_basename = basename($filepath);
 			say("\n\n>>>>>>> $file_basename\n");	
 		}
 
 		make_translation($filepath, \%dictionary, $overwrite);
-        }
+	}
 
+}
+
+
+sub generate_json_wanted {
+	# generate JSON lang file from all __('trans') values
+
+	if(-f && $_ =~ /^.+\.php$/ ) {
+		my $filepath = $_; # option 'no_chdir' in find() must be set for this assignment;
+		#say $filepath;
+		put_trans_strings_into_buffer($filepath, \%dictionary);
+	}
+
+}
+
+
+sub generate_json_lang_file {
+	# genate JSON lang file from __('') strings in views and controllers.
+
+	my ($target_filepath, @controllers_and_blade_dirs) = @_;
+
+	# get translation keys
+	find({ wanted => \&generate_json_wanted, no_chdir => 1 }, @controllers_and_blade_dirs);
+
+	my @keys_from_dict = ( keys %dictionary );
+	my @keys_for_json = sort { lc($a) cmp lc($b) } @keys_from_dict;
+
+	#my $target_filepath = 'en.json'; #"/tmp/.__temp_$fname"; #"${fpath_dir}.__temp_$fname";
+	open(FILE_OUT,'>', $target_filepath) || die "Couldn't create the file '~/custom_file'. err -> $! \n";
+
+	my $num_of_keys = scalar @keys_for_json;
+
+	# write to JSON file
+	print FILE_OUT "{\n";
+	for(my $i = 0; $i<$num_of_keys; ++$i) {
+		print FILE_OUT "\t" . '"' . $keys_for_json[$i] . '"' . ': ""';
+		if($i<($num_of_keys - 1)) {
+			print FILE_OUT ",";
+		}
+		print FILE_OUT "\n";
+	}
+	print FILE_OUT "}\n";
 }
 
 
@@ -92,7 +133,7 @@ sub optparse {
 				$process_dirs_paths = $1;
 			}	
 			when ($_ =~ m/--generate-json/ || $_ eq '-j') {
-				$generate_json = $1;
+				$generate_json = 1;
 			}	
 			default {
 				say "invalid argument option specified '$arg'";
@@ -106,15 +147,15 @@ sub optparse {
 }
 
 
-
 sub main() {
 	my ($lang_dir_path, $process_dirs_paths, $generate_json);
 	($overwrite, $lang_dir_path, $process_dirs_paths, $generate_json) = optparse();
 
-	#die('temp end');
-
-	my $lang_directory_path = '/home/marko/Programming/Projects/misc_scripts-perl/LaraperlTrans/data/original_data/youbox/lang';
-	my @controllers_and_blade_dirs = ('/home/marko/Programming/Projects/misc_scripts-perl/LaraperlTrans/data/original_data/youbox/resources/views'); 
+	my $lang_directory_path = 'data/TestProject/lang';
+	my @controllers_and_blade_dirs = (
+		'data/TestProject/views',
+		'data/TestProject/Controllers'
+	); 
 
 	# check if specified directories exist:
 	-d $lang_directory_path || die("Wrong path specified, not a directory -> '$lang_directory_path'"); 	
@@ -122,9 +163,14 @@ sub main() {
 	foreach my $dirpath (@controllers_and_blade_dirs) {
 		-d $dirpath || die("Wrong path specified, not a directory -> '$dirpath'"); 	
 	}
-	
-	find({ wanted => \&lang_trans_wanted, no_chdir => 1 }, $lang_directory_path);
-	find({ wanted => \&conv_files_wanted, no_chdir => 1 }, @controllers_and_blade_dirs);
+
+	if($generate_json) {
+		generate_json_lang_file('en.json', @controllers_and_blade_dirs);
+	}
+	else {
+		find({ wanted => \&lang_trans_wanted, no_chdir => 1 }, $lang_directory_path);
+		find({ wanted => \&conv_files_wanted, no_chdir => 1 }, @controllers_and_blade_dirs);
+	}
 
 	# DEBUG - print populated translation dictionary
 	#print Dumper \%dictionary;

@@ -9,7 +9,7 @@ use File::Copy "mv";
 use My::Helpers qw(trim file_contents_slurp autovivication_insert);
 
 use Exporter qw(import); 
-our @EXPORT_OK = qw(lang_file_to_hash make_translation get_key_from_filepath make_parent_trans_key);
+our @EXPORT_OK = qw(lang_file_to_hash make_translation get_key_from_filepath make_parent_trans_key put_trans_strings_into_buffer);
 
 
 sub lang_file_to_hash {
@@ -173,6 +173,25 @@ sub make_translation {
 		# TODO: keep permissions of original $filepath file 
 		mv($temp_filepath, $filepath) || die $err_msg . $!;	
 		say "File overwritten successfully";
+	}
+}
+
+sub put_trans_strings_into_buffer {
+	# Put __('') strings into buffer
+
+	(@_ == 2) || die "Invalid number of arguments received in put_trans_strings_into_buffer";
+	my ($filepath, $dictionary) = @_;
+
+	open(FILE, $filepath) || die "Couldn't open the file '$filepath'\n"; my ($fname, $fpath_dir) = fileparse($filepath);
+
+	while(<FILE>) {
+		my @matches = $_ =~ /__\(['"](.*?)['"]\)/g ;
+
+		if(@matches) {
+			foreach(@matches) {
+				$dictionary->{$_} = 't';
+			}
+		}
 	}
 }
 

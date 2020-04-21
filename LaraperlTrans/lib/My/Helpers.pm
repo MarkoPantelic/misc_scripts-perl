@@ -49,4 +49,10 @@ sub autovivication_insert {
         }
 }
 
+sub uniq {
+        # Remove duplicate values from array.
+        my %seen;
+        grep !$seen{$_}++, @_;
+}
+
 
